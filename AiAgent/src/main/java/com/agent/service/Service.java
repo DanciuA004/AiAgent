@@ -1,13 +1,18 @@
 package com.agent.service;
 
+import com.agent.dao.MemoryRepository;
 import com.agent.dao.MessageRepository;
+import com.agent.dto.Memory;
 import com.agent.dto.Message;
 import dev.langchain4j.model.chat.ChatModel;
 import dev.langchain4j.model.ollama.OllamaChatModel;
 import org.springframework.beans.factory.annotation.Value;
 
 import java.time.LocalDateTime;
+import java.util.Collections;
+import java.util.List;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 /**
  * Handles chat requests by maintaining conversation context and querying the configured language model.
@@ -16,6 +21,7 @@ import java.util.UUID;
 public class Service {
 
     private final MessageRepository messageRepository;
+    private final MemoryRepository memoryRepository;
     private final ChatModel model;
 
     /**
@@ -26,10 +32,12 @@ public class Service {
      */
     public Service(
             MessageRepository messageRepository,
+            MemoryRepository memoryRepository,
             @Value("${ai.base-url}") String baseUrl,
             @Value("${ai.model}") String modelName) {
 
         this.messageRepository = messageRepository;
+        this.memoryRepository = memoryRepository;
         this.model = OllamaChatModel.builder()
                 .baseUrl(baseUrl)
                 .modelName(modelName)
@@ -46,7 +54,27 @@ public class Service {
 
         saveMessage("user", message);
 
-        String response = model.chat(message);
+        String history = buildConversationHistory();
+        String memories = buildMemoryContext();
+
+        String prompt = """
+                You are Nova, an AI companion.
+                
+                Things you know about the user:
+                
+                %s
+                
+                Recent conversation:
+                
+                %s
+                
+                Current user message:
+                
+                %s
+                """
+                .formatted(memories, history, message);
+
+        String response = model.chat(prompt);
 
         saveMessage("assistant", response);
 
@@ -66,4 +94,25 @@ public class Service {
 
         messageRepository.save(message);
     }
+
+    private String buildConversationHistory() {
+
+        List<Message> messages =
+                messageRepository.findTop20ByOrderByCreatedAtDesc();
+
+        Collections.reverse(messages);
+
+        return messages.stream()
+                .map(m -> m.getRole() + ": " + m.getContent())
+                .collect(Collectors.joining("\n"));
+    }
+
+    private String buildMemoryContext() {
+
+        return memoryRepository.findAll()
+                .stream()
+                .map(Memory::getMemoryText)
+                .collect(Collectors.joining("\n"));
+    }
+
 }
