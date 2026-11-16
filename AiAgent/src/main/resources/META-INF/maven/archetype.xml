@@ -1,0 +1,9 @@
+<archetype>
+  <id>AiAgent</id>
+  <sources>
+    <source>src/main/java/com.agent.App.java</source>
+  </sources>
+  <testSources>
+    <source>src/test/java/AppTest.java</source>
+  </testSources>
+</archetype>
