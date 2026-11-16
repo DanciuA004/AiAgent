@@ -1,11 +1,13 @@
 package com.agent.service;
 
+import com.agent.dao.MessageRepository;
+import com.agent.dto.Message;
 import dev.langchain4j.model.chat.ChatModel;
 import dev.langchain4j.model.ollama.OllamaChatModel;
 import org.springframework.beans.factory.annotation.Value;
 
-import java.util.ArrayList;
-import java.util.List;
+import java.time.LocalDateTime;
+import java.util.UUID;
 
 /**
  * Handles chat requests by maintaining conversation context and querying the configured language model.
@@ -13,19 +15,21 @@ import java.util.List;
 @org.springframework.stereotype.Service
 public class Service {
 
-    private final List<String> history = new ArrayList<>();
+    private final MessageRepository messageRepository;
     private final ChatModel model;
 
     /**
      * Creates the chat service and configures its Ollama model from application properties.
      *
-     * @param baseUrl Ollama server URL configured by {@code ai.base-url}
+     * @param baseUrl   Ollama server URL configured by {@code ai.base-url}
      * @param modelName Ollama model name configured by {@code ai.model}
      */
     public Service(
+            MessageRepository messageRepository,
             @Value("${ai.base-url}") String baseUrl,
             @Value("${ai.model}") String modelName) {
 
+        this.messageRepository = messageRepository;
         this.model = OllamaChatModel.builder()
                 .baseUrl(baseUrl)
                 .modelName(modelName)
@@ -40,26 +44,26 @@ public class Service {
      */
     public String chat(String message) {
 
-        // Include prior user messages and model replies so the model can follow the conversation.
-        history.add("User: " + message);
+        saveMessage("user", message);
 
-        String context = String.join("\n", history);
+        String response = model.chat(message);
 
-        String prompt = """
-        You are Nova.
-
-        Conversation:
-
-        %s
-
-        Respond to the latest user message.
-        """.formatted(context);
-
-        // Save the response so it becomes part of the context for the next request.
-        String response = model.chat(prompt);
-
-        history.add("Nova: " + response);
+        saveMessage("assistant", response);
 
         return response;
+    }
+
+    private void saveMessage(
+            String role,
+            String content) {
+
+        Message message = new Message();
+
+        message.setId(UUID.randomUUID());
+        message.setRole(role);
+        message.setContent(content);
+        message.setCreatedAt(LocalDateTime.now());
+
+        messageRepository.save(message);
     }
 }
