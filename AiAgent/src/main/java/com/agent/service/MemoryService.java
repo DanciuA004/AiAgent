@@ -9,6 +9,7 @@ import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
 import java.util.UUID;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 /**
@@ -18,6 +19,11 @@ import java.util.stream.Collectors;
 public class MemoryService {
 
     private static final Logger logger = LoggerFactory.getLogger(MemoryService.class);
+    private static final Pattern PERSONAL_FACT_CUE = Pattern.compile(
+            "\\b(?:i(?:'m| am| live| work| like| love| prefer| have| own| speak| enjoy| dislike|"
+                    + " play| study| use| was born| grew up)|"
+                    + "my (?:favorite|favourite|name|job|work|family|hobby|goal|birthday)\\b)",
+            Pattern.CASE_INSENSITIVE);
 
     private final MemoryRepository memoryRepository;
     private final ChatModel model;
@@ -39,8 +45,18 @@ public class MemoryService {
      * @param userMessage message to evaluate
      */
     public void rememberIfRelevant(String userMessage) {
-        if (shouldRemember(userMessage)) {
-            saveMemory(extractMemory(userMessage));
+        if (userMessage == null || !PERSONAL_FACT_CUE.matcher(userMessage).find()) {
+            logger.debug("Skipped memory evaluation because the message has no personal-fact cue.");
+            return;
+        }
+
+        long start = System.nanoTime();
+        String memoryText = extractMemoryOrNone(userMessage);
+        long elapsedMillis = (System.nanoTime() - start) / 1_000_000;
+        logger.debug("Memory evaluation completed in {} ms", elapsedMillis);
+
+        if (memoryText != null && !memoryText.equalsIgnoreCase("NONE")) {
+            saveMemory(memoryText);
         }
     }
 
@@ -50,44 +66,30 @@ public class MemoryService {
      * @return formatted memory context
      */
     public String getMemoryContext() {
-        return memoryRepository.findAll()
+        long start = System.nanoTime();
+        String context = memoryRepository.findTop20ByOrderByImportanceDesc()
                 .stream()
                 .map(Memory::getMemoryText)
                 .collect(Collectors.joining("\n"));
+        logger.debug("Loaded memory context in {} ms", (System.nanoTime() - start) / 1_000_000);
+        return context;
     }
 
-    private boolean shouldRemember(String userMessage) {
+    private String extractMemoryOrNone(String userMessage) {
         String prompt = """
-                Determine whether the following
-                information about the user should
-                be remembered long-term.
-
-                Only answer YES or NO.
-
-                Message:
-
-                %s
-                """
-                .formatted(userMessage);
-
-        String result = model.chat(prompt);
-        return result.toUpperCase().contains("YES");
-    }
-
-    private String extractMemory(String userMessage) {
-        String prompt = """
-                Rewrite the user's message as one concise, factual memory
-                about the user. Return only the memory text, with no labels,
-                explanation, or markdown. Never return an empty response.
-
+                Decide whether the message contains a durable, useful fact about the user.
+                If it does, rewrite that fact as one concise, factual memory.
+                If it does not, return exactly NONE.
+                Return only NONE or the memory text, with no labels, explanation, or markdown.
+                
                 Example:
-
+                
                 Input:
                 My favourite game is Minecraft.
-
+                
                 Output:
                 User's favourite game is Minecraft.
-
+                
                 Message:
                 %s
                 """
@@ -95,8 +97,8 @@ public class MemoryService {
 
         String memoryText = model.chat(prompt);
         if (memoryText == null || memoryText.isBlank()) {
-            logger.warn("Memory extraction returned no text; storing the original user message instead.");
-            return userMessage.strip();
+            logger.warn("Memory evaluation returned no text; skipping memory persistence.");
+            return null;
         }
 
         return memoryText.strip();

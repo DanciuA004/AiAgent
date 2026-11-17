@@ -44,12 +44,12 @@ public class MessageService {
     }
 
     /**
-     * Retrieves and formats the twenty most recent messages in chronological order.
+     * Retrieves and formats the nineteen most recent messages in chronological order.
      *
      * @return formatted conversation history
      */
     public String getRecentConversationHistory() {
-        List<Message> messages = messageRepository.findTop20ByOrderByCreatedAtDesc();
+        List<Message> messages = messageRepository.findTop19ByOrderByCreatedAtDesc();
         Collections.reverse(messages);
 
         return messages.stream()

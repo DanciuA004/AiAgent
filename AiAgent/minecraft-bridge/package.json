@@ -1,0 +1,16 @@
+{
+  "name": "ai-agent-minecraft-bridge",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Local Mineflayer bridge for the AiAgent Spring application",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "mineflayer": "^4.31.0"
+  }
+}

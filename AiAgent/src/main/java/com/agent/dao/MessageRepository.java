@@ -9,5 +9,5 @@ import java.util.UUID;
 public interface MessageRepository
         extends JpaRepository<Message, UUID> {
 
-    List<Message> findTop20ByOrderByCreatedAtDesc();
+    List<Message> findTop19ByOrderByCreatedAtDesc();
 }
